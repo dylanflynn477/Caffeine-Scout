@@ -112,6 +112,40 @@ def test_decimal_coupons_shipping_and_caffeine_math(config: AppConfig) -> None:
     assert offer.caffeine_mg_per_dollar == pytest.approx(106.714)
 
 
+def test_multibuy_promotion_uses_required_purchase_quantity(config: AppConfig) -> None:
+    raw = RawOffer(
+        source="test",
+        retailer="Shop",
+        product_name="Alani Nu Energy Drink Cherry Slush, 12 oz single can",
+        listed_price=Decimal("2.79"),
+        promotion_text="Buy 5 for $12",
+        promotion_required_quantity=5,
+        promotion_total=Decimal("12"),
+        promotional_unit_price=Decimal("2.40"),
+        url="https://example.test/alani",
+    )
+    offer = normalize_offer(raw, config)
+    assert offer.pack_count == 5
+    assert offer.effective_price == Decimal("12.00")
+    assert offer.price_per_can == Decimal("2.4000")
+    assert any("Requires buying 5 items" in note for note in offer.notes)
+
+
+def test_inconsistent_multibuy_is_quarantinable(config: AppConfig) -> None:
+    raw = RawOffer(
+        source="test",
+        retailer="Shop",
+        product_name="C4 Energy Drink 12 oz single can",
+        listed_price=Decimal("2.99"),
+        promotion_required_quantity=5,
+        promotion_total=Decimal("12"),
+        promotional_unit_price=Decimal("1.99"),
+        url="https://example.test/c4",
+    )
+    with pytest.raises(NormalizationError, match="inconsistent"):
+        normalize_offer(raw, config)
+
+
 @pytest.mark.parametrize("price", ["0", "-1"])
 def test_malformed_prices_are_rejected(config: AppConfig, price: str) -> None:
     raw = RawOffer(

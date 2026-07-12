@@ -103,10 +103,31 @@ sources:
         note: "Official catalog; store selection can change price and availability"
       - retailer: "CVS"
         url: "https://www.cvs.com/shop/grocery/beverages/sport-energy-drinks"
-        note: "Dynamic catalog; add an exact public product URL before scanning"
+        note: "Official catalog; the dedicated CVS discovery adapter scans this separately"
       - retailer: "Target"
-        url: "https://www.target.com/s?searchTerm=energy+drinks"
-        note: "Search page only; add an exact public product URL before scanning"
+        url: "https://www.target.com/c/energy-drinks-beverages-grocery/-/N-4uez2"
+        note: "Official catalog; the dedicated Target discovery adapter scans this separately"
+
+  target:
+    enabled: true
+    discovery_urls:
+      - "https://www.target.com/c/energy-drinks-beverages-grocery/-/N-4uez2"
+    maximum_pages: 3
+    visit_product_pages: false
+
+  cvs:
+    enabled: true
+    discovery_urls:
+      - "https://www.cvs.com/shop/grocery/beverages/sport-energy-drinks"
+    maximum_pages: 3
+    visit_product_pages: false
+
+  acme:
+    enabled: false
+    discovery_urls:
+      - "https://www.acmemarkets.com/shop/aisles/beverages/energy-drinks-shots/energy-drinks-shots.html"
+    maximum_pages: 3
+    visit_product_pages: false
 
   amazon:
     enabled: false

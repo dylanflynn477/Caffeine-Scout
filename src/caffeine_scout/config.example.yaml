@@ -39,7 +39,22 @@ sources:
       - {retailer: "ACME Markets", url: "https://www.acmemarkets.com/shop/aisles/beverages/energy-drinks-shots/energy-drinks-shots.html", local_store: "1001 South St, Philadelphia, PA 19147", note: "Discovery only; dynamic grocery catalog"}
       - {retailer: "GIANT", url: "https://giantfoodstores.com/groceries/beverages/energy-drinks.html", local_store: "60 N 23rd St, Philadelphia, PA 19103", note: "Discovery only; store selection affects offers"}
       - {retailer: "CVS", url: "https://www.cvs.com/shop/grocery/beverages/sport-energy-drinks", note: "Discovery only; dynamic catalog"}
-      - {retailer: "Target", url: "https://www.target.com/s?searchTerm=energy+drinks", note: "Discovery only; search page"}
+      - {retailer: "Target", url: "https://www.target.com/c/energy-drinks-beverages-grocery/-/N-4uez2", note: "Discovery handled by the dedicated Target adapter"}
+  target:
+    enabled: true
+    discovery_urls: ["https://www.target.com/c/energy-drinks-beverages-grocery/-/N-4uez2"]
+    maximum_pages: 3
+    visit_product_pages: false
+  cvs:
+    enabled: true
+    discovery_urls: ["https://www.cvs.com/shop/grocery/beverages/sport-energy-drinks"]
+    maximum_pages: 3
+    visit_product_pages: false
+  acme:
+    enabled: false
+    discovery_urls: ["https://www.acmemarkets.com/shop/aisles/beverages/energy-drinks-shots/energy-drinks-shots.html"]
+    maximum_pages: 3
+    visit_product_pages: false
   amazon: {enabled: false}
 scoring:
   incredible_price_per_can: 1.00

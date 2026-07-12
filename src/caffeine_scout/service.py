@@ -23,7 +23,14 @@ from caffeine_scout.normalization import (
     offer_fingerprint,
 )
 from caffeine_scout.scoring import calculate_robbery_score
-from caffeine_scout.sources import AmazonSource, JsonLdProductPageSource, MockSource
+from caffeine_scout.sources import (
+    AcmeSource,
+    AmazonSource,
+    CVSSource,
+    JsonLdProductPageSource,
+    MockSource,
+    TargetSource,
+)
 
 
 def build_sources(config: AppConfig) -> list[RetailerSource]:
@@ -34,6 +41,12 @@ def build_sources(config: AppConfig) -> list[RetailerSource]:
         sources.append(JsonLdProductPageSource(config.sources.jsonld, config.crawler))
     if config.sources.amazon.enabled:
         sources.append(AmazonSource(config.sources.amazon))
+    if config.sources.target.enabled:
+        sources.append(TargetSource(config.sources.target, config.crawler))
+    if config.sources.cvs.enabled:
+        sources.append(CVSSource(config.sources.cvs, config.crawler))
+    if config.sources.acme.enabled:
+        sources.append(AcmeSource(config.sources.acme, config.crawler))
     return sources
 
 
@@ -41,7 +54,7 @@ async def _run_source(
     source: RetailerSource, request: SearchRequest
 ) -> tuple[str, list[object], Exception | None]:
     try:
-        return source.name, list(await source.search(request)), None
+        return source.name, list(await source.discover(request)), None
     except Exception as exc:  # adapters are an explicit fault-isolation boundary
         return source.name, [], exc
 

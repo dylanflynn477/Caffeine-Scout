@@ -455,6 +455,11 @@ class EthicalPageCrawler:
                         "networkidle",
                         timeout=int(self.config.playwright_timeout_seconds * 1000),
                     )
+                with suppress(PlaywrightTimeoutError):
+                    await page.wait_for_selector(
+                        "main [data-product-id], main [data-testid='product-card']",
+                        timeout=min(int(self.config.playwright_timeout_seconds * 1000), 10_000),
+                    )
                 html = await page.content()
                 if tasks:
                     await asyncio.gather(*tasks, return_exceptions=True)

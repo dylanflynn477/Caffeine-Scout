@@ -26,6 +26,8 @@ from caffeine_scout.presentation import (
 )
 from caffeine_scout.service import build_sources
 from caffeine_scout.service import scan as run_scan
+from caffeine_scout.sources import AcmeSource, CVSSource, TargetSource
+from caffeine_scout.sources.discovery import RetailerDiscoveryUnavailable
 from caffeine_scout.sources.jsonld import JsonLdProductPageSource, StructuredPricingUnavailable
 
 app = typer.Typer(
@@ -98,7 +100,7 @@ def sources(config: ConfigOption = None) -> None:
         enabled = build_sources(settings)
         statuses = list(await asyncio.gather(*(source.healthcheck() for source in enabled)))
         enabled_names = {source.name for source in enabled}
-        for name in ("mock", "jsonld", "amazon"):
+        for name in ("mock", "jsonld", "amazon", "target", "cvs", "acme"):
             if name not in enabled_names:
                 statuses.append(
                     SourceStatus(name=name, enabled=False, healthy=False, detail="disabled")
@@ -141,6 +143,26 @@ def diagnose_source(
     """Run the ethical crawl pipeline and show safe per-stage diagnostics."""
     settings = load_config(config)
     requested = source_name.casefold()
+    discovery_adapters = {
+        "target": TargetSource(settings.sources.target, settings.crawler),
+        "cvs": CVSSource(settings.sources.cvs, settings.crawler),
+        "acme": AcmeSource(settings.sources.acme, settings.crawler),
+    }
+    if requested in discovery_adapters:
+        discovery_adapter = discovery_adapters[requested]
+        request = SearchRequest(
+            zip_code=settings.location.zip_code,
+            maximum_distance_miles=settings.location.maximum_distance_miles,
+            brands=[brand.name for brand in settings.brands],
+        )
+
+        async def diagnose_discovery() -> None:
+            with suppress(RetailerDiscoveryUnavailable):
+                await discovery_adapter.discover(request)
+
+        asyncio.run(diagnose_discovery())
+        print_source_diagnostics(discovery_adapter.last_results, console)
+        return
     pages = [
         page
         for page in settings.sources.jsonld.product_pages

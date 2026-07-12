@@ -104,10 +104,25 @@ class AmazonSourceConfig(BaseSourceConfig):
         return all((self.credential_id, self.credential_secret, self.partner_tag))
 
 
+class DiscoverySourceConfig(BaseSourceConfig):
+    """Public retailer catalog discovery with a deliberately small page budget."""
+
+    discovery_urls: list[HttpUrl] = Field(default_factory=list)
+    maximum_pages: int = Field(default=3, ge=1, le=3)
+    visit_product_pages: bool = False
+
+
 class SourcesConfig(BaseModel):
     mock: BaseSourceConfig = Field(default_factory=BaseSourceConfig)
     jsonld: JsonLdSourceConfig = Field(default_factory=JsonLdSourceConfig)
     amazon: AmazonSourceConfig = Field(default_factory=lambda: AmazonSourceConfig(enabled=False))
+    target: DiscoverySourceConfig = Field(
+        default_factory=lambda: DiscoverySourceConfig(enabled=False)
+    )
+    cvs: DiscoverySourceConfig = Field(default_factory=lambda: DiscoverySourceConfig(enabled=False))
+    acme: DiscoverySourceConfig = Field(
+        default_factory=lambda: DiscoverySourceConfig(enabled=False)
+    )
 
 
 class ScoringConfig(BaseModel):

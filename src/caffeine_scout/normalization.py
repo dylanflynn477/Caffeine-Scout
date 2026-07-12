@@ -14,6 +14,7 @@ from caffeine_scout.models import Offer, RawOffer
 PACK_PATTERNS = (
     re.compile(r"\bpack\s+of\s+(\d{1,3})\b", re.I),
     re.compile(r"\b(\d{1,3})\s*[- ]?pack\b", re.I),
+    re.compile(r"\b(\d{1,3})\s*pk\b", re.I),
     re.compile(r"\b(\d{1,3})\s*(?:count|ct)\b", re.I),
     re.compile(r"\b(\d{1,3})\s+cans?\b", re.I),
     re.compile(r"\bcase\s+of\s+(\d{1,3})\b", re.I),
@@ -129,17 +130,36 @@ def normalize_offer(raw: RawOffer, config: AppConfig) -> Offer:
         raise NormalizationError("listed price must be positive")
     if raw.coupon_value < 0 or raw.shipping_cost < 0:
         raise NormalizationError("coupon and shipping values cannot be negative")
-    effective = _money(raw.listed_price + raw.shipping_cost - raw.coupon_value)
+    purchase_quantity = 1
+    price_basis = raw.listed_price
+    notes = list(raw.notes)
+    if raw.promotion_required_quantity and raw.promotion_total:
+        purchase_quantity = raw.promotion_required_quantity
+        price_basis = raw.promotion_total
+        calculated_unit = _money(raw.promotion_total / raw.promotion_required_quantity)
+        if raw.promotional_unit_price and raw.promotional_unit_price != calculated_unit:
+            raise NormalizationError("promotional unit price is inconsistent with promotion total")
+        notes.append(
+            f"Requires buying {purchase_quantity} items for ${raw.promotion_total:.2f}; "
+            f"single-item price ${raw.listed_price:.2f}"
+        )
+    elif raw.promotion_required_quantity or raw.promotion_total:
+        raise NormalizationError("promotion quantity and total must be provided together")
+    normalized_pack_count = pack_count * purchase_quantity
+    effective = _money(price_basis + raw.shipping_cost - raw.coupon_value)
     if effective <= 0:
         raise NormalizationError("effective price must be positive")
-    price_per_can = (effective / pack_count).quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
+    price_per_can = (effective / normalized_pack_count).quantize(
+        Decimal("0.0001"), rounding=ROUND_HALF_UP
+    )
     caffeine = raw.caffeine_mg_per_can
     if caffeine is None:
         caffeine_match = CAFFEINE_PATTERN.search(raw.product_name)
         caffeine = int(caffeine_match.group(1)) if caffeine_match else brand.default_caffeine_mg
-    caffeine_value = float(Decimal(caffeine * pack_count) / effective) if caffeine else None
+    caffeine_value = (
+        float(Decimal(caffeine * normalized_pack_count) / effective) if caffeine else None
+    )
     confidence = raw.data_confidence
-    notes = list(raw.notes)
     if raw.pack_count is None:
         confidence = min(confidence, 0.75)
         notes.append("Pack count parsed from product name")
@@ -151,10 +171,24 @@ def normalize_offer(raw: RawOffer, config: AppConfig) -> Offer:
         canonical_brand=brand.name,
         product_line=raw.product_line or extract_product_line(raw.product_name),
         flavor=raw.flavor or extract_flavor(raw.product_name, brand),
-        pack_count=pack_count,
+        pack_count=normalized_pack_count,
         can_size_oz=raw.can_size_oz or extract_can_size_oz(raw.product_name),
         caffeine_mg_per_can=caffeine,
         listed_price=_money(raw.listed_price),
+        regular_price=_money(raw.regular_price) if raw.regular_price else None,
+        advertised_unit_price=raw.advertised_unit_price,
+        promotion_text=raw.promotion_text,
+        promotion_required_quantity=raw.promotion_required_quantity,
+        promotion_total=_money(raw.promotion_total) if raw.promotion_total else None,
+        promotional_unit_price=(
+            _money(raw.promotional_unit_price)
+            if raw.promotional_unit_price
+            else (
+                _money(raw.promotion_total / raw.promotion_required_quantity)
+                if raw.promotion_total and raw.promotion_required_quantity
+                else None
+            )
+        ),
         coupon_value=_money(raw.coupon_value),
         shipping_cost=_money(raw.shipping_cost),
         effective_price=effective,

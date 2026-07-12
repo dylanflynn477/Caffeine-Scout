@@ -121,7 +121,8 @@ robots protections cannot be disabled in configuration.
 ### Included retailer website samples
 
 The example configuration includes current official links for GNC, The Vitamin Shoppe,
-GIANT, ACME, CVS, and Target. They are intentionally disabled or marked discovery-only:
+GIANT, ACME, CVS, and Target. Target and CVS use bounded catalog discovery; ACME remains
+experimental and disabled by default:
 
 - GNC has exact Ghost, Alani Nu, and C4 product-page examples. Its nearby store is at
   1625 Chestnut Street, Philadelphia, PA 19103.
@@ -129,13 +130,17 @@ GIANT, ACME, CVS, and Target. They are intentionally disabled or marked discover
   Chestnut Street, Philadelphia, PA 19103.
 - GIANT has an exact Alani Nu delivery-page example plus its energy-drink catalog; its
   official locator lists a store at 60 N 23rd Street, Philadelphia, PA 19103.
-- ACME, CVS, and Target are catalog/discovery links only. Dynamic catalog pages are not
-  silently treated as product offers. Add a permitted exact product URL before scanning.
+- Target scans its canonical energy-drink category with static product cards first,
+  followed by the shared embedded-data and Playwright fallbacks when permitted.
+- CVS scans its official sport and energy-drink catalog. Availability remains unknown
+  unless the page says in stock, available, unavailable, or out of stock explicitly.
+- ACME uses the same bounded pipeline but remains experimental until a live permitted
+  page yields a real normalized offer. It is disabled in the example configuration.
 
-Run `caffeine-scout sources` to see every candidate. To try an exact page, change only
-that page's `enabled` value to `true`. A live failure remains isolated from other sources.
-These entries are configuration examples, not claims that live scraping has been tested
-or approved by the retailer.
+Discovery is limited to three pages per adapter per scan. Product links are canonicalized
+without tracking parameters, selectors stay isolated in each retailer module, and
+powders, sticks, packets, supplements, and irrelevant brands are rejected before shared
+normalization. A live failure remains isolated from other sources.
 
 ## Commands
 
@@ -152,12 +157,19 @@ caffeine-scout history --brand Ghost
 caffeine-scout sources
 caffeine-scout diagnose-source GNC
 caffeine-scout diagnose-source "The Vitamin Shoppe"
+caffeine-scout diagnose-source target
+caffeine-scout diagnose-source cvs
+caffeine-scout diagnose-source acme
 caffeine-scout init-config
 ```
 
 Effective price is `listed price + unavoidable shipping - immediate coupon`. Rebates,
 store credit, subscriptions, and membership-only discounts are not silently counted.
 Their requirements remain visible as conditions.
+
+Multi-buy promotions retain both the ordinary single-item price and the required deal.
+For example, `Buy 5 for $12` is normalized as a five-item $12 purchase at $2.40 each;
+the application never applies the $2.40 rate to a one-can purchase.
 
 ## Robbery Index
 
@@ -176,6 +188,11 @@ Exact thresholds and label boundaries are covered by tests.
   allowlist of exact public URLs. It can also inspect public product hydration state and
   use the ethical Playwright fallback. Missing permitted pricing is reported with a
   structured stage-by-stage reason.
+- **TargetSource** and **CVSSource** discover visible public catalog cards for configured
+  brands, then use shared structured/embedded/rendered fallbacks. Both stop on refusals,
+  robots restrictions, CAPTCHAs, and rate limits.
+- **AcmeSource** is experimental and disabled. Its adapter exists for permitted public
+  diagnostics, but no working live-price claim is made until a real offer is observed.
 - **AmazonSource** is deliberately disabled. Amazon's Product Advertising API 5.0 was
   deprecated on May 15, 2026 in favor of the official
   [Creators API](https://affiliate-program.amazon.com/creatorsapi/docs/en-us/introduction).
@@ -196,8 +213,9 @@ retailer terms, applicable law, and credential security.
 ## Implement a new source
 
 1. Copy `src/caffeine_scout/sources/template.py` into a retailer-specific module.
-2. Implement `RetailerSource.search(SearchRequest) -> list[RawOffer]` and a cheap,
-   non-invasive `healthcheck`.
+2. Implement `RetailerSource.search(SearchRequest) -> list[RawOffer]`, optionally
+   `discover(SearchRequest)` for catalog discovery, and a cheap, non-invasive
+   `healthcheck`.
 3. Keep authentication, request pacing, public API/HTML parsing, and error translation
    isolated in that module. Use HTTPX for async HTTP, Beautiful Soup for static HTML,
    and Playwright only when a permitted page truly requires JavaScript rendering.
@@ -218,7 +236,8 @@ caffeine-scout scan --config config.example.yaml
 ```
 
 Tests cover parsing, exclusions, Decimal math, deduplication, historical medians,
-all label boundaries, malformed data, partial source failure, JSON-LD/Next.js fixtures,
+all label boundaries, malformed data, partial source failure, Target/CVS catalog fixtures,
+multi-buy pricing, pagination, JSON-LD/Next.js fixtures,
 robots decisions, refusals, CAPTCHA detection, throttling, caching, progressive fallback,
 first-party JSON observation, and machine-readable exports. Tests never use live sites.
 

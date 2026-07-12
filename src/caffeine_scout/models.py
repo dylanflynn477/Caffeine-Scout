@@ -35,6 +35,12 @@ class RawOffer(BaseModel):
     retailer: str
     product_name: str
     listed_price: Decimal
+    regular_price: Decimal | None = None
+    advertised_unit_price: str | None = None
+    promotion_text: str | None = None
+    promotion_required_quantity: int | None = Field(default=None, gt=1)
+    promotion_total: Decimal | None = Field(default=None, gt=0)
+    promotional_unit_price: Decimal | None = Field(default=None, gt=0)
     url: str
     source_product_id: str | None = None
     canonical_brand: str | None = None
@@ -72,6 +78,12 @@ class Offer(BaseModel):
     can_size_oz: float | None = Field(default=None, gt=0)
     caffeine_mg_per_can: int | None = Field(default=None, gt=0)
     listed_price: Decimal = Field(gt=0)
+    regular_price: Decimal | None = Field(default=None, gt=0)
+    advertised_unit_price: str | None = None
+    promotion_text: str | None = None
+    promotion_required_quantity: int | None = Field(default=None, gt=1)
+    promotion_total: Decimal | None = Field(default=None, gt=0)
+    promotional_unit_price: Decimal | None = Field(default=None, gt=0)
     coupon_value: Decimal = Field(ge=0)
     shipping_cost: Decimal = Field(ge=0)
     effective_price: Decimal = Field(gt=0)
@@ -171,6 +183,10 @@ class RetailerSource(ABC):
     @abstractmethod
     async def search(self, request: SearchRequest) -> list[RawOffer]:
         """Return source-native offers at the validation boundary."""
+
+    async def discover(self, request: SearchRequest) -> list[RawOffer]:
+        """Discover offers from configured public catalog pages when supported."""
+        return await self.search(request)
 
     async def healthcheck(self) -> SourceStatus:
         return SourceStatus(name=self.name, healthy=True, detail="ready")
