@@ -10,7 +10,22 @@ product_filters:
   excluded_terms: ["powder", "pre-workout", "packet", "mix", "supplement", "empty can"]
 sources:
   mock: {enabled: true}
-  jsonld: {enabled: true, product_urls: []}
+  jsonld:
+    enabled: true
+    product_urls: []
+    product_pages:
+      - {retailer: "GNC", enabled: false, url: "https://www.gnc.com/energy-drinks/ghost-energy-drink.html", fulfillment_type: "online"}
+      - {retailer: "GNC", enabled: false, url: "https://www.gnc.com/energy-drinks/alaniNuEnergyCase.html", fulfillment_type: "online"}
+      - {retailer: "GNC", enabled: false, url: "https://www.gnc.com/energy-drinks/cellucor-c4-energy.html", fulfillment_type: "online"}
+      - {retailer: "The Vitamin Shoppe", enabled: false, url: "https://www.vitaminshoppe.com/p/ghost-energy-original-12-drink-s/ghs-16538", fulfillment_type: "online"}
+      - {retailer: "GIANT Instant Delivery", enabled: false, url: "https://instant.giantfoodstores.com/store/giant-instant-delivery/products/25517425-alani-nu-cherry-slush-flavored-energy-drink-12-fl-oz", fulfillment_type: "delivery"}
+    catalog_pages:
+      - {retailer: "GNC", url: "https://www.gnc.com/drinks/energy-drinks/", local_store: "1625 Chestnut St, Philadelphia, PA 19103", note: "Discovery only; exact product pages are disabled above"}
+      - {retailer: "The Vitamin Shoppe", url: "https://www.vitaminshoppe.com/c/food-drinks/drinks/energy-drinks", local_store: "1701 Chestnut St, Philadelphia, PA 19103", note: "Discovery only; select an exact product page"}
+      - {retailer: "ACME Markets", url: "https://www.acmemarkets.com/shop/aisles/beverages/energy-drinks-shots/energy-drinks-shots.html", local_store: "1001 South St, Philadelphia, PA 19147", note: "Discovery only; dynamic grocery catalog"}
+      - {retailer: "GIANT", url: "https://giantfoodstores.com/groceries/beverages/energy-drinks.html", local_store: "60 N 23rd St, Philadelphia, PA 19103", note: "Discovery only; store selection affects offers"}
+      - {retailer: "CVS", url: "https://www.cvs.com/shop/grocery/beverages/sport-energy-drinks", note: "Discovery only; dynamic catalog"}
+      - {retailer: "Target", url: "https://www.target.com/s?searchTerm=energy+drinks", note: "Discovery only; search page"}
   amazon: {enabled: false}
 scoring:
   incredible_price_per_can: 1.00

@@ -93,6 +93,25 @@ never YAML committed to source control; `.env.example` lists supported names.
 The SQLite URL defaults to `sqlite:///caffeine_scout.db` and can be overridden with a
 top-level `database_url`. Source adapters are individually enabled or disabled.
 
+### Included retailer website samples
+
+The example configuration includes current official links for GNC, The Vitamin Shoppe,
+GIANT, ACME, CVS, and Target. They are intentionally disabled or marked discovery-only:
+
+- GNC has exact Ghost, Alani Nu, and C4 product-page examples. Its nearby store is at
+  1625 Chestnut Street, Philadelphia, PA 19103.
+- The Vitamin Shoppe has an exact Ghost product-page example and a store at 1701
+  Chestnut Street, Philadelphia, PA 19103.
+- GIANT has an exact Alani Nu delivery-page example plus its energy-drink catalog; its
+  official locator lists a store at 60 N 23rd Street, Philadelphia, PA 19103.
+- ACME, CVS, and Target are catalog/discovery links only. Dynamic catalog pages are not
+  silently treated as product offers. Add a permitted exact product URL before scanning.
+
+Run `caffeine-scout sources` to see every candidate. To try an exact page, change only
+that page's `enabled` value to `true`. A live failure remains isolated from other sources.
+These entries are configuration examples, not claims that live scraping has been tested
+or approved by the retailer.
+
 ## Commands
 
 ```bash

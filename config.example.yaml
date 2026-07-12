@@ -40,6 +40,58 @@ sources:
   jsonld:
     enabled: true
     product_urls: []
+    # Exact product pages only. These current official examples are disabled
+    # until you confirm the retailer permits automated access and enable them.
+    product_pages:
+      - retailer: "GNC"
+        enabled: false
+        url: "https://www.gnc.com/energy-drinks/ghost-energy-drink.html"
+        fulfillment_type: "online"
+        notes: ["One-time price only; subscription pricing is excluded"]
+      - retailer: "GNC"
+        enabled: false
+        url: "https://www.gnc.com/energy-drinks/alaniNuEnergyCase.html"
+        fulfillment_type: "online"
+      - retailer: "GNC"
+        enabled: false
+        url: "https://www.gnc.com/energy-drinks/cellucor-c4-energy.html"
+        fulfillment_type: "online"
+      - retailer: "The Vitamin Shoppe"
+        enabled: false
+        url: "https://www.vitaminshoppe.com/p/ghost-energy-original-12-drink-s/ghs-16538"
+        fulfillment_type: "online"
+        notes: ["One-time price only; auto-delivery pricing is excluded"]
+      - retailer: "GIANT Instant Delivery"
+        enabled: false
+        url: "https://instant.giantfoodstores.com/store/giant-instant-delivery/products/25517425-alani-nu-cherry-slush-flavored-energy-drink-12-fl-oz"
+        fulfillment_type: "delivery"
+        notes: ["Availability and pricing may depend on the selected store"]
+
+    # Category and store pages help humans discover exact product URLs. They
+    # are intentionally never parsed as price offers.
+    catalog_pages:
+      - retailer: "GNC"
+        url: "https://www.gnc.com/drinks/energy-drinks/"
+        local_store: "1625 Chestnut St, Philadelphia, PA 19103"
+        note: "Official energy-drink catalog; exact product pages are listed above"
+      - retailer: "The Vitamin Shoppe"
+        url: "https://www.vitaminshoppe.com/c/food-drinks/drinks/energy-drinks"
+        local_store: "1701 Chestnut St, Philadelphia, PA 19103"
+        note: "Official catalog; select an exact product page before enabling"
+      - retailer: "ACME Markets"
+        url: "https://www.acmemarkets.com/shop/aisles/beverages/energy-drinks-shots/energy-drinks-shots.html"
+        local_store: "1001 South St, Philadelphia, PA 19147"
+        note: "Dynamic grocery catalog; no exact structured-price page is enabled"
+      - retailer: "GIANT"
+        url: "https://giantfoodstores.com/groceries/beverages/energy-drinks.html"
+        local_store: "60 N 23rd St, Philadelphia, PA 19103"
+        note: "Official catalog; store selection can change price and availability"
+      - retailer: "CVS"
+        url: "https://www.cvs.com/shop/grocery/beverages/sport-energy-drinks"
+        note: "Dynamic catalog; add an exact public product URL before scanning"
+      - retailer: "Target"
+        url: "https://www.target.com/s?searchTerm=energy+drinks"
+        note: "Search page only; add an exact public product URL before scanning"
 
   amazon:
     enabled: false

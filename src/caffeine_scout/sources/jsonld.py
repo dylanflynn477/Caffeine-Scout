@@ -11,7 +11,7 @@ import httpx
 from bs4 import BeautifulSoup
 from playwright.async_api import async_playwright
 
-from caffeine_scout.config import JsonLdSourceConfig
+from caffeine_scout.config import JsonLdProductPageConfig, JsonLdSourceConfig
 from caffeine_scout.models import RawOffer, RetailerSource, SearchRequest, SourceStatus
 
 
@@ -88,15 +88,32 @@ class JsonLdProductPageSource(RetailerSource):
         self.config = config
 
     async def search(self, request: SearchRequest) -> list[RawOffer]:
-        del request
-        if not self.config.product_urls:
+        pages = self.config.enabled_product_pages
+        if request.online_only:
+            pages = [page for page in pages if page.fulfillment_type == "online"]
+        if request.pickup_only:
+            pages = [page for page in pages if page.fulfillment_type == "pickup"]
+        if not pages:
             return []
         results: list[RawOffer] = []
         unsupported: list[str] = []
-        pages = await self._fetch_pages()
-        for url, html in pages:
+        fetched_pages = await self._fetch_pages(pages)
+        for page, html in fetched_pages:
+            url = str(page.url)
             try:
-                results.extend(parse_jsonld_product_page(html, url))
+                parsed = parse_jsonld_product_page(html, url, retailer=page.retailer)
+                for offer in parsed:
+                    results.append(
+                        offer.model_copy(
+                            update={
+                                "fulfillment_type": page.fulfillment_type,
+                                "store_name": page.store_name,
+                                "store_address": page.store_address,
+                                "distance_miles": page.distance_miles,
+                                "notes": [*offer.notes, *page.notes],
+                            }
+                        )
+                    )
             except StructuredPricingUnavailable:
                 unsupported.append(url)
         if unsupported and not results:
@@ -105,22 +122,24 @@ class JsonLdProductPageSource(RetailerSource):
             )
         return results
 
-    async def _fetch_pages(self) -> list[tuple[str, str]]:
+    async def _fetch_pages(
+        self, configured_pages: list[JsonLdProductPageConfig]
+    ) -> list[tuple[JsonLdProductPageConfig, str]]:
         if self.config.use_playwright:
-            pages: list[tuple[str, str]] = []
+            pages: list[tuple[JsonLdProductPageConfig, str]] = []
             async with async_playwright() as playwright:
                 browser = await playwright.chromium.launch(headless=True)
                 try:
                     page = await browser.new_page(user_agent=self.config.user_agent)
-                    for index, url in enumerate(self.config.product_urls):
+                    for index, configured_page in enumerate(configured_pages):
                         if index:
                             await asyncio.sleep(self.config.request_delay_seconds)
                         await page.goto(
-                            url,
+                            str(configured_page.url),
                             wait_until="domcontentloaded",
                             timeout=int(self.config.timeout_seconds * 1000),
                         )
-                        pages.append((url, await page.content()))
+                        pages.append((configured_page, await page.content()))
                 finally:
                     await browser.close()
             return pages
@@ -132,24 +151,31 @@ class JsonLdProductPageSource(RetailerSource):
             timeout=self.config.timeout_seconds,
             follow_redirects=True,
         ) as client:
-            for index, url in enumerate(self.config.product_urls):
+            for index, configured_page in enumerate(configured_pages):
                 if index:
                     await asyncio.sleep(self.config.request_delay_seconds)
-                response = await client.get(url)
+                response = await client.get(str(configured_page.url))
                 response.raise_for_status()
-                pages.append((url, response.text))
+                pages.append((configured_page, response.text))
         return pages
 
     async def healthcheck(self) -> SourceStatus:
-        if not self.config.product_urls:
+        enabled_count = len(self.config.enabled_product_pages)
+        configured_count = len(self.config.product_urls) + len(self.config.product_pages)
+        if not enabled_count:
             return SourceStatus(
-                name=self.name, healthy=True, detail="enabled; no product URLs configured"
+                name=self.name,
+                healthy=True,
+                detail=(
+                    f"enabled; 0/{configured_count} exact product pages active; "
+                    f"{len(self.config.catalog_pages)} discovery-only catalog(s)"
+                ),
             )
         return SourceStatus(
             name=self.name,
             healthy=True,
             detail=(
-                f"configured with {len(self.config.product_urls)} exact URL(s); "
+                f"configured with {enabled_count}/{configured_count} active exact URL(s); "
                 f"renderer={'playwright' if self.config.use_playwright else 'static HTTP'}"
             ),
         )

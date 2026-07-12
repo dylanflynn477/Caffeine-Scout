@@ -5,10 +5,11 @@ from __future__ import annotations
 import os
 from decimal import Decimal
 from pathlib import Path
+from typing import Literal
 
 import yaml
 from dotenv import load_dotenv
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl, model_validator
 
 
 class LocationConfig(BaseModel):
@@ -32,12 +33,46 @@ class BaseSourceConfig(BaseModel):
     enabled: bool = True
 
 
+class JsonLdProductPageConfig(BaseModel):
+    """One exact public product page that may expose schema.org offer data."""
+
+    enabled: bool = False
+    retailer: str
+    url: HttpUrl
+    fulfillment_type: Literal["online", "pickup", "delivery", "unknown"] = "online"
+    store_name: str | None = None
+    store_address: str | None = None
+    distance_miles: float | None = Field(default=None, ge=0)
+    notes: list[str] = Field(default_factory=list)
+
+
+class RetailerCatalogPageConfig(BaseModel):
+    """Discovery link only; catalog pages are never treated as price offers."""
+
+    retailer: str
+    url: HttpUrl
+    local_store: str | None = None
+    note: str
+
+
 class JsonLdSourceConfig(BaseSourceConfig):
     product_urls: list[str] = Field(default_factory=list)
+    product_pages: list[JsonLdProductPageConfig] = Field(default_factory=list)
+    catalog_pages: list[RetailerCatalogPageConfig] = Field(default_factory=list)
     request_delay_seconds: float = Field(default=0.5, ge=0)
     timeout_seconds: float = Field(default=15, gt=0)
     user_agent: str = "CaffeineScout/0.1 (+public-product-page JSON-LD reader)"
     use_playwright: bool = False
+
+    @property
+    def enabled_product_pages(self) -> list[JsonLdProductPageConfig]:
+        legacy = [
+            JsonLdProductPageConfig(
+                enabled=True, retailer="JSON-LD retailer", url=url
+            )
+            for url in self.product_urls
+        ]
+        return [*legacy, *(page for page in self.product_pages if page.enabled)]
 
 
 class AmazonSourceConfig(BaseSourceConfig):

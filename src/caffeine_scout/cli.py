@@ -100,6 +100,31 @@ def sources(config: ConfigOption = None) -> None:
                 statuses.append(
                     SourceStatus(name=name, enabled=False, healthy=False, detail="disabled")
                 )
+        pages_by_retailer: dict[str, list[bool]] = {}
+        for page in settings.sources.jsonld.product_pages:
+            pages_by_retailer.setdefault(page.retailer, []).append(page.enabled)
+        for retailer, page_states in pages_by_retailer.items():
+            active = sum(page_states)
+            statuses.append(
+                SourceStatus(
+                    name=f"site:{retailer}",
+                    enabled=bool(active),
+                    healthy=bool(active),
+                    detail=f"{active}/{len(page_states)} exact product page(s) enabled",
+                )
+            )
+        for catalog in settings.sources.jsonld.catalog_pages:
+            detail = f"discovery only: {catalog.note}"
+            if catalog.local_store:
+                detail += f"; local: {catalog.local_store}"
+            statuses.append(
+                SourceStatus(
+                    name=f"catalog:{catalog.retailer}",
+                    enabled=False,
+                    healthy=False,
+                    detail=detail,
+                )
+            )
         return statuses
 
     print_sources(asyncio.run(collect()), console)

@@ -6,11 +6,12 @@ from pathlib import Path
 
 import pytest
 
-from caffeine_scout.config import AppConfig
+from caffeine_scout.config import AppConfig, JsonLdSourceConfig
 from caffeine_scout.database import Repository
 from caffeine_scout.models import RawOffer, RetailerSource, SearchRequest
 from caffeine_scout.service import scan
 from caffeine_scout.sources.jsonld import (
+    JsonLdProductPageSource,
     StructuredPricingUnavailable,
     parse_jsonld_product_page,
 )
@@ -107,3 +108,68 @@ def test_jsonld_reports_unsupported_without_structured_price() -> None:
     html = (FIXTURES / "no_pricing.html").read_text(encoding="utf-8")
     with pytest.raises(StructuredPricingUnavailable, match="no Product Offer"):
         parse_jsonld_product_page(html, "https://example.test/product")
+
+
+@pytest.mark.asyncio
+async def test_configured_jsonld_page_applies_retailer_and_store_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = JsonLdProductPageSource(
+        JsonLdSourceConfig.model_validate(
+            {
+                "product_pages": [
+                    {
+                        "enabled": True,
+                        "retailer": "The Vitamin Shoppe",
+                        "url": "https://example.test/ghost",
+                        "fulfillment_type": "pickup",
+                        "store_name": "Chestnut St",
+                        "store_address": "1701 Chestnut St, Philadelphia, PA 19103",
+                        "distance_miles": 0.2,
+                        "notes": ["Fixture pickup metadata"],
+                    }
+                ]
+            }
+        )
+    )
+    html = (FIXTURES / "product_offer.html").read_text(encoding="utf-8")
+
+    async def fake_fetch(
+        pages: list[object],
+    ) -> list[tuple[object, str]]:
+        return [(pages[0], html)]
+
+    monkeypatch.setattr(source, "_fetch_pages", fake_fetch)
+    offers = await source.search(
+        SearchRequest(
+            zip_code="19103", maximum_distance_miles=5, brands=["Ghost"]
+        )
+    )
+    assert offers[0].retailer == "The Vitamin Shoppe"
+    assert offers[0].fulfillment_type == "pickup"
+    assert offers[0].store_name == "Chestnut St"
+    assert offers[0].distance_miles == 0.2
+    assert "Fixture pickup metadata" in offers[0].notes
+
+
+@pytest.mark.asyncio
+async def test_disabled_jsonld_sample_page_is_not_requested() -> None:
+    source = JsonLdProductPageSource(
+        JsonLdSourceConfig.model_validate(
+            {
+                "product_pages": [
+                    {
+                        "enabled": False,
+                        "retailer": "GNC",
+                        "url": "https://example.test/ghost",
+                    }
+                ]
+            }
+        )
+    )
+    offers = await source.search(
+        SearchRequest(
+            zip_code="19103", maximum_distance_miles=5, brands=["Ghost"]
+        )
+    )
+    assert offers == []
