@@ -114,6 +114,45 @@ class SourceError(BaseModel):
     message: str
 
 
+class RobotsDecision(BaseModel):
+    domain: str
+    robots_url: str
+    status_code: int | None
+    decision: Literal["allowed", "disallowed", "unknown"]
+    matched_rule: str | None = None
+    checked_at: datetime
+    explanation: str
+
+
+class SourceDiagnostic(BaseModel):
+    source: str
+    stage: str
+    success: bool
+    reason: str
+    details: dict[str, str | int | float | bool | None] = Field(default_factory=dict)
+
+
+class FetchResult(BaseModel):
+    requested_url: str
+    final_url: str | None = None
+    status_code: int | None = None
+    method_used: (
+        Literal["static", "embedded_json", "playwright_dom", "public_first_party_json"] | None
+    ) = None
+    robots_decision: RobotsDecision
+    blocked_reason: str | None = None
+    cached: bool = False
+    fetched_at: datetime
+    raw_snapshot_path: str | None = None
+    diagnostics: list[SourceDiagnostic] = Field(default_factory=list)
+
+
+class CrawlResult(BaseModel):
+    fetch: FetchResult
+    offers: list[RawOffer] = Field(default_factory=list)
+    failure_reason: str | None = None
+
+
 class ScanResult(BaseModel):
     scan_id: int
     zip_code: str

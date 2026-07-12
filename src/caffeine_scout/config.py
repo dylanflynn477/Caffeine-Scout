@@ -33,6 +33,30 @@ class BaseSourceConfig(BaseModel):
     enabled: bool = True
 
 
+class CrawlerConfig(BaseModel):
+    """Non-bypassable ethical access policy for public retailer pages."""
+
+    user_agent: str = "CaffeineScout/0.1 (+https://github.com/dylanflynn477/Caffeine-Scout)"
+    contact: str = ""
+    respect_robots_txt: Literal[True] = True
+    allow_when_robots_unavailable: bool = True
+    minimum_request_interval_seconds: float = Field(default=3, ge=0)
+    per_domain_concurrency: int = Field(default=1, ge=1, le=4)
+    response_cache_hours: int = Field(default=12, ge=12)
+    request_timeout_seconds: float = Field(default=20, gt=0, le=120)
+    playwright_timeout_seconds: float = Field(default=30, gt=0, le=120)
+    observe_public_product_json: bool = True
+    stop_on_captcha: Literal[True] = True
+    stop_on_access_denied: Literal[True] = True
+    maximum_pages_per_source_per_scan: int = Field(default=10, ge=1, le=10)
+
+    @property
+    def effective_user_agent(self) -> str:
+        if self.contact and self.contact not in self.user_agent:
+            return f"{self.user_agent} Contact: {self.contact}"
+        return self.user_agent
+
+
 class JsonLdProductPageConfig(BaseModel):
     """One exact public product page that may expose schema.org offer data."""
 
@@ -59,17 +83,11 @@ class JsonLdSourceConfig(BaseSourceConfig):
     product_urls: list[str] = Field(default_factory=list)
     product_pages: list[JsonLdProductPageConfig] = Field(default_factory=list)
     catalog_pages: list[RetailerCatalogPageConfig] = Field(default_factory=list)
-    request_delay_seconds: float = Field(default=0.5, ge=0)
-    timeout_seconds: float = Field(default=15, gt=0)
-    user_agent: str = "CaffeineScout/0.1 (+public-product-page JSON-LD reader)"
-    use_playwright: bool = False
 
     @property
     def enabled_product_pages(self) -> list[JsonLdProductPageConfig]:
         legacy = [
-            JsonLdProductPageConfig(
-                enabled=True, retailer="JSON-LD retailer", url=url
-            )
+            JsonLdProductPageConfig(enabled=True, retailer="JSON-LD retailer", url=url)
             for url in self.product_urls
         ]
         return [*legacy, *(page for page in self.product_pages if page.enabled)]
@@ -117,6 +135,7 @@ class AppConfig(BaseModel):
     location: LocationConfig
     brands: list[BrandConfig] = Field(min_length=1)
     product_filters: ProductFilterConfig
+    crawler: CrawlerConfig = Field(default_factory=CrawlerConfig)
     sources: SourcesConfig
     scoring: ScoringConfig
     alerts: AlertsConfig

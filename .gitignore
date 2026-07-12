@@ -2,6 +2,7 @@ __pycache__/
 *.py[cod]
 *.egg-info/
 .coverage
+.caffeine_scout_cache/
 .codex/
 .env
 .mypy_cache/

@@ -27,6 +27,7 @@ from caffeine_scout.normalization import (
         ("Alani Nu Energy Drink Cherry Slush, 12 Fl Oz Cans, Pack of 12", 12),
         ("GHOST Energy 16oz (12 Pack)", 12),
         ("C4 Performance Energy Drink Variety Pack, 12 Count", 12),
+        ("GHOST Energy Drink - Orange Cream - 16oz. (12 Cans)", 12),
         ("Alani Nu 24-Pack 12 oz Energy Drinks", 24),
         ("12 oz single can", 1),
         ("12 packets", None),
@@ -77,6 +78,7 @@ def test_flavor_extraction(config: AppConfig) -> None:
         extract_flavor("Alani Nu Energy Drink Cherry Slush, 12 Fl Oz Cans, Pack of 12", alani)
         == "Cherry Slush"
     )
+    assert extract_flavor("Energy Drink - Orange Cream - 16oz. (12 Cans)", ghost) == "Orange Cream"
 
 
 @pytest.mark.parametrize(

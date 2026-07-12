@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import shutil
+from contextlib import suppress
 from importlib.resources import as_file, files
 from pathlib import Path
 from typing import Annotated, Literal
@@ -14,16 +15,18 @@ from rich.console import Console
 from caffeine_scout.alerts import TerminalAlertSink, matching_alerts
 from caffeine_scout.config import load_config
 from caffeine_scout.database import Repository
-from caffeine_scout.models import SourceStatus
+from caffeine_scout.models import SearchRequest, SourceStatus
 from caffeine_scout.presentation import (
     print_history,
     print_scan,
+    print_source_diagnostics,
     print_sources,
     scan_csv,
     scan_json,
 )
 from caffeine_scout.service import build_sources
 from caffeine_scout.service import scan as run_scan
+from caffeine_scout.sources.jsonld import JsonLdProductPageSource, StructuredPricingUnavailable
 
 app = typer.Typer(
     name="caffeine-scout",
@@ -128,6 +131,45 @@ def sources(config: ConfigOption = None) -> None:
         return statuses
 
     print_sources(asyncio.run(collect()), console)
+
+
+@app.command("diagnose-source")
+def diagnose_source(
+    source_name: Annotated[str, typer.Argument(help="Configured retailer name, such as GNC")],
+    config: ConfigOption = None,
+) -> None:
+    """Run the ethical crawl pipeline and show safe per-stage diagnostics."""
+    settings = load_config(config)
+    requested = source_name.casefold()
+    pages = [
+        page
+        for page in settings.sources.jsonld.product_pages
+        if page.retailer.casefold() == requested
+    ]
+    if requested == "jsonld":
+        pages = [page for page in settings.sources.jsonld.product_pages if page.enabled]
+    if not pages:
+        retailers = sorted({page.retailer for page in settings.sources.jsonld.product_pages})
+        raise typer.BadParameter(
+            f"No exact product pages configured for {source_name!r}. "
+            f"Choose one of: {', '.join(retailers)}"
+        )
+    source_config = settings.sources.jsonld.model_copy(deep=True)
+    source_config.product_urls = []
+    source_config.product_pages = [page.model_copy(update={"enabled": True}) for page in pages]
+    adapter = JsonLdProductPageSource(source_config, settings.crawler)
+    request = SearchRequest(
+        zip_code=settings.location.zip_code,
+        maximum_distance_miles=settings.location.maximum_distance_miles,
+        brands=[brand.name for brand in settings.brands],
+    )
+
+    async def diagnose() -> None:
+        with suppress(StructuredPricingUnavailable):
+            await adapter.search(request)
+
+    asyncio.run(diagnose())
+    print_source_diagnostics(adapter.last_results, console)
 
 
 @app.command("init-config")

@@ -1,91 +1,272 @@
-"""Polite parser for public product-page schema.org JSON-LD."""
+"""Progressive extraction for public product pages and embedded product JSON."""
 
 from __future__ import annotations
 
-import asyncio
 import json
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
-import httpx
 from bs4 import BeautifulSoup
-from playwright.async_api import async_playwright
 
-from caffeine_scout.config import JsonLdProductPageConfig, JsonLdSourceConfig
-from caffeine_scout.models import RawOffer, RetailerSource, SearchRequest, SourceStatus
+from caffeine_scout.config import CrawlerConfig, JsonLdSourceConfig
+from caffeine_scout.crawler import EthicalPageCrawler
+from caffeine_scout.models import (
+    CrawlResult,
+    RawOffer,
+    RetailerSource,
+    SearchRequest,
+    SourceDiagnostic,
+    SourceStatus,
+)
 
 
 class StructuredPricingUnavailable(RuntimeError):
     pass
 
 
-def _nodes(value: Any) -> list[dict[str, Any]]:
+def _walk(value: Any) -> list[dict[str, Any]]:
     if isinstance(value, dict):
-        graph = value.get("@graph")
-        return [*([value] if "@type" in value else []), *(_nodes(graph) if graph else [])]
+        return [value, *(node for child in value.values() for node in _walk(child))]
     if isinstance(value, list):
-        return [node for item in value for node in _nodes(item)]
+        return [node for child in value for node in _walk(child)]
     return []
 
 
-def _is_type(node: dict[str, Any], expected: str) -> bool:
-    node_type = node.get("@type", "")
-    types = node_type if isinstance(node_type, list) else [node_type]
-    return any(str(value).casefold() == expected.casefold() for value in types)
+def _types(node: dict[str, Any]) -> set[str]:
+    value = node.get("@type", "")
+    values = value if isinstance(value, list) else [value]
+    return {str(item).casefold() for item in values}
+
+
+def _brand_name(value: Any) -> str | None:
+    if isinstance(value, dict):
+        name = value.get("name")
+        return str(name).strip() if name else None
+    return str(value).strip() if value else None
+
+
+def _iter_products(
+    value: Any, inherited_brand: str | None = None
+) -> list[tuple[dict[str, Any], str | None]]:
+    products: list[tuple[dict[str, Any], str | None]] = []
+    if isinstance(value, dict):
+        brand = _brand_name(value.get("brand")) or inherited_brand
+        if "product" in _types(value):
+            products.append((value, brand))
+        for child in value.values():
+            products.extend(_iter_products(child, brand))
+    elif isinstance(value, list):
+        for child in value:
+            products.extend(_iter_products(child, inherited_brand))
+    return products
+
+
+def _decimal(value: Any) -> Decimal | None:
+    if isinstance(value, dict):
+        for key in ("value", "price", "amount", "lowPrice"):
+            if key in value:
+                parsed = _decimal(value[key])
+                if parsed is not None:
+                    return parsed
+        return None
+    try:
+        parsed = Decimal(str(value))
+    except (InvalidOperation, TypeError):
+        return None
+    return parsed if parsed.is_finite() and parsed > 0 else None
+
+
+def _offer_price(offer: dict[str, Any]) -> Decimal | None:
+    for key in ("price", "lowPrice", "salePrice", "currentPrice"):
+        if key in offer:
+            price = _decimal(offer[key])
+            if price is not None:
+                return price
+    specification = offer.get("priceSpecification")
+    if specification is not None:
+        return _decimal(specification)
+    return None
+
+
+def _offer_nodes(value: Any) -> list[dict[str, Any]]:
+    if isinstance(value, list):
+        return [node for item in value for node in _offer_nodes(item)]
+    if not isinstance(value, dict):
+        return []
+    nested = value.get("offers")
+    candidates = [value]
+    if nested is not None:
+        candidates.extend(_offer_nodes(nested))
+    return candidates
+
+
+def _availability(value: Any) -> bool | None:
+    if isinstance(value, bool):
+        return value
+    text = str(value or "").casefold()
+    if any(marker in text for marker in ("instock", "in_stock", "available")):
+        return True
+    if any(marker in text for marker in ("outofstock", "out_of_stock", "unavailable")):
+        return False
+    return None
+
+
+def extract_jsonld_offers(
+    html: str, url: str, retailer: str = "JSON-LD retailer"
+) -> list[RawOffer]:
+    soup = BeautifulSoup(html, "html.parser")
+    documents: list[Any] = []
+    for script in soup.select('script[type="application/ld+json"]'):
+        try:
+            documents.append(json.loads(script.get_text(strip=True)))
+        except (json.JSONDecodeError, TypeError):
+            continue
+    return extract_public_product_json(documents, url, retailer, url, structured_only=True)
 
 
 def parse_jsonld_product_page(
     html: str, url: str, retailer: str = "JSON-LD retailer"
 ) -> list[RawOffer]:
+    results = extract_jsonld_offers(html, url, retailer)
+    if not results:
+        raise StructuredPricingUnavailable("no Product Offer or AggregateOffer pricing found")
+    return results
+
+
+def extract_embedded_product_data(
+    html: str, url: str, retailer: str = "JSON-LD retailer"
+) -> list[RawOffer]:
     soup = BeautifulSoup(html, "html.parser")
-    parsed_nodes: list[dict[str, Any]] = []
-    for script in soup.select('script[type="application/ld+json"]'):
+    documents: list[Any] = []
+    for script in soup.find_all("script"):
+        script_type = str(script.get("type") or "").casefold()
+        script_id = str(script.get("id") or "").casefold()
+        named_product_state = any(
+            marker in script_id
+            for marker in ("next_data", "nuxt", "product", "redux", "hydration", "initial")
+        )
+        if script_type != "application/json" and not named_product_state:
+            continue
+        if any(marker in script_id for marker in ("analytics", "tracking", "customer")):
+            continue
         try:
-            parsed_nodes.extend(_nodes(json.loads(script.get_text(strip=True))))
+            documents.append(json.loads(script.get_text(strip=True)))
         except (json.JSONDecodeError, TypeError):
             continue
+    return extract_public_product_json(documents, url, retailer, url)
+
+
+def extract_public_product_json(
+    payload: Any,
+    page_url: str,
+    retailer: str,
+    endpoint: str,
+    *,
+    structured_only: bool = False,
+) -> list[RawOffer]:
     results: list[RawOffer] = []
-    for product in (node for node in parsed_nodes if _is_type(node, "Product")):
+    seen: set[tuple[str, str, str | None]] = set()
+    for product, inherited_brand in _iter_products(payload):
         name = str(product.get("name") or "").strip()
-        brand_value = product.get("brand")
-        brand = brand_value.get("name") if isinstance(brand_value, dict) else brand_value
+        if not name:
+            continue
         offers_value = product.get("offers")
-        offers = offers_value if isinstance(offers_value, list) else [offers_value]
-        for offer in (item for item in offers if isinstance(item, dict)):
-            price_value = offer.get("price")
-            if price_value is None and _is_type(offer, "AggregateOffer"):
-                price_value = offer.get("lowPrice")
-            try:
-                price = Decimal(str(price_value))
-            except (InvalidOperation, TypeError):
+        for offer in _offer_nodes(offers_value):
+            price = _offer_price(offer)
+            if price is None:
                 continue
-            availability = str(offer.get("availability") or "")
+            product_id = (
+                str(product.get("sku") or product.get("productID") or product.get("id") or "")
+                or None
+            )
+            key = (name, str(price), product_id)
+            if key in seen:
+                continue
+            seen.add(key)
             results.append(
                 RawOffer(
                     source="jsonld",
                     retailer=retailer,
-                    source_product_id=str(product.get("sku") or product.get("productID") or "")
-                    or None,
+                    source_product_id=product_id,
                     product_name=name,
-                    canonical_brand=str(brand) if brand else None,
+                    canonical_brand=_brand_name(product.get("brand")) or inherited_brand,
                     listed_price=price,
                     fulfillment_type="online",
-                    in_stock=("instock" in availability.casefold()) if availability else None,
-                    url=str(offer.get("url") or url),
-                    data_confidence=0.82,
-                    notes=["Price parsed from public schema.org JSON-LD"],
+                    in_stock=_availability(offer.get("availability")),
+                    url=str(offer.get("url") or product.get("url") or page_url),
+                    data_confidence=0.86,
+                    notes=[
+                        "Price parsed from public schema.org product data",
+                        f"Public data endpoint: {endpoint}",
+                    ],
                 )
             )
-    if not results:
-        raise StructuredPricingUnavailable("no Product Offer or AggregateOffer pricing found")
+    if structured_only:
+        return results
+
+    for candidate in _walk(payload):
+        name = str(
+            candidate.get("productName") or candidate.get("name") or candidate.get("title") or ""
+        ).strip()
+        if not name or "energy" not in name.casefold():
+            continue
+        price = None
+        for price_key in ("currentPrice", "salePrice", "price"):
+            if price_key in candidate:
+                price = _decimal(candidate[price_key])
+                if price is not None:
+                    break
+        if price is None:
+            continue
+        product_id = (
+            str(candidate.get("sku") or candidate.get("productId") or candidate.get("id") or "")
+            or None
+        )
+        fingerprint = (name, str(price), product_id)
+        if fingerprint in seen:
+            continue
+        seen.add(fingerprint)
+        brand_value = candidate.get("brand") or candidate.get("brandName")
+        availability_value = (
+            candidate.get("availability")
+            if "availability" in candidate
+            else candidate.get("inStock")
+        )
+        results.append(
+            RawOffer(
+                source="jsonld",
+                retailer=retailer,
+                source_product_id=product_id,
+                product_name=name,
+                canonical_brand=_brand_name(brand_value),
+                listed_price=price,
+                fulfillment_type="online",
+                in_stock=_availability(availability_value),
+                url=str(candidate.get("canonicalUrl") or candidate.get("url") or page_url),
+                data_confidence=0.72,
+                notes=[
+                    "Price parsed from public embedded product state",
+                    f"Public data endpoint: {endpoint}",
+                ],
+            )
+        )
     return results
 
 
 class JsonLdProductPageSource(RetailerSource):
     name = "jsonld"
 
-    def __init__(self, config: JsonLdSourceConfig) -> None:
+    def __init__(
+        self,
+        config: JsonLdSourceConfig,
+        crawler_config: CrawlerConfig | None = None,
+        crawler: EthicalPageCrawler | None = None,
+    ) -> None:
         self.config = config
+        self.crawler_config = crawler_config or CrawlerConfig()
+        self._crawler = crawler
+        self.last_diagnostics: list[SourceDiagnostic] = []
+        self.last_results: list[CrawlResult] = []
 
     async def search(self, request: SearchRequest) -> list[RawOffer]:
         pages = self.config.enabled_product_pages
@@ -93,16 +274,46 @@ class JsonLdProductPageSource(RetailerSource):
             pages = [page for page in pages if page.fulfillment_type == "online"]
         if request.pickup_only:
             pages = [page for page in pages if page.fulfillment_type == "pickup"]
+        pages = pages[: self.crawler_config.maximum_pages_per_source_per_scan]
         if not pages:
             return []
+
+        self.last_diagnostics = []
+        self.last_results = []
         results: list[RawOffer] = []
-        unsupported: list[str] = []
-        fetched_pages = await self._fetch_pages(pages)
-        for page, html in fetched_pages:
-            url = str(page.url)
-            try:
-                parsed = parse_jsonld_product_page(html, url, retailer=page.retailer)
-                for offer in parsed:
+        crawler_instance = self._crawler or EthicalPageCrawler(self.crawler_config)
+        async with crawler_instance as crawler:
+            for page in pages:
+                retailer = page.retailer
+
+                def static_extractor(
+                    html: str, url: str, retailer_name: str = retailer
+                ) -> list[RawOffer]:
+                    return extract_jsonld_offers(html, url, retailer_name)
+
+                def embedded_extractor(
+                    html: str, url: str, retailer_name: str = retailer
+                ) -> list[RawOffer]:
+                    return extract_embedded_product_data(html, url, retailer_name)
+
+                def public_json_extractor(
+                    payload: Any,
+                    page_url: str,
+                    endpoint: str,
+                    retailer_name: str = retailer,
+                ) -> list[RawOffer]:
+                    return extract_public_product_json(payload, page_url, retailer_name, endpoint)
+
+                result = await crawler.crawl(
+                    source=retailer,
+                    url=str(page.url),
+                    static_extractor=static_extractor,
+                    embedded_extractor=embedded_extractor,
+                    public_json_extractor=public_json_extractor,
+                )
+                self.last_results.append(result)
+                self.last_diagnostics.extend(result.fetch.diagnostics)
+                for offer in result.offers:
                     results.append(
                         offer.model_copy(
                             update={
@@ -114,50 +325,14 @@ class JsonLdProductPageSource(RetailerSource):
                             }
                         )
                     )
-            except StructuredPricingUnavailable:
-                unsupported.append(url)
-        if unsupported and not results:
+        if not results:
+            reasons = sorted(
+                {result.failure_reason or "unsupported" for result in self.last_results}
+            )
             raise StructuredPricingUnavailable(
-                f"structured pricing unavailable for {len(unsupported)} configured page(s)"
+                f"no permitted public offers found ({', '.join(reasons)})"
             )
         return results
-
-    async def _fetch_pages(
-        self, configured_pages: list[JsonLdProductPageConfig]
-    ) -> list[tuple[JsonLdProductPageConfig, str]]:
-        if self.config.use_playwright:
-            pages: list[tuple[JsonLdProductPageConfig, str]] = []
-            async with async_playwright() as playwright:
-                browser = await playwright.chromium.launch(headless=True)
-                try:
-                    page = await browser.new_page(user_agent=self.config.user_agent)
-                    for index, configured_page in enumerate(configured_pages):
-                        if index:
-                            await asyncio.sleep(self.config.request_delay_seconds)
-                        await page.goto(
-                            str(configured_page.url),
-                            wait_until="domcontentloaded",
-                            timeout=int(self.config.timeout_seconds * 1000),
-                        )
-                        pages.append((configured_page, await page.content()))
-                finally:
-                    await browser.close()
-            return pages
-
-        pages = []
-        headers = {"User-Agent": self.config.user_agent}
-        async with httpx.AsyncClient(
-            headers=headers,
-            timeout=self.config.timeout_seconds,
-            follow_redirects=True,
-        ) as client:
-            for index, configured_page in enumerate(configured_pages):
-                if index:
-                    await asyncio.sleep(self.config.request_delay_seconds)
-                response = await client.get(str(configured_page.url))
-                response.raise_for_status()
-                pages.append((configured_page, response.text))
-        return pages
 
     async def healthcheck(self) -> SourceStatus:
         enabled_count = len(self.config.enabled_product_pages)
@@ -176,6 +351,6 @@ class JsonLdProductPageSource(RetailerSource):
             healthy=True,
             detail=(
                 f"configured with {enabled_count}/{configured_count} active exact URL(s); "
-                f"renderer={'playwright' if self.config.use_playwright else 'static HTTP'}"
+                "progressive ethical crawler enabled"
             ),
         )

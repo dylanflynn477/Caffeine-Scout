@@ -4,9 +4,11 @@ import json
 from decimal import Decimal
 from pathlib import Path
 
+import httpx
 import pytest
 
-from caffeine_scout.config import AppConfig, JsonLdSourceConfig
+from caffeine_scout.config import AppConfig, CrawlerConfig, JsonLdSourceConfig
+from caffeine_scout.crawler import EthicalPageCrawler
 from caffeine_scout.database import Repository
 from caffeine_scout.models import RawOffer, RetailerSource, SearchRequest
 from caffeine_scout.service import scan
@@ -112,8 +114,22 @@ def test_jsonld_reports_unsupported_without_structured_price() -> None:
 
 @pytest.mark.asyncio
 async def test_configured_jsonld_page_applies_retailer_and_store_metadata(
-    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
+    html = (FIXTURES / "product_offer.html").read_text(encoding="utf-8")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/robots.txt":
+            return httpx.Response(200, text="User-agent: *\nAllow: /\n")
+        return httpx.Response(200, text=html, headers={"content-type": "text/html"})
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    crawler = EthicalPageCrawler(
+        CrawlerConfig(minimum_request_interval_seconds=0),
+        client=client,
+        cache_dir=tmp_path / "cache",
+        playwright_loader=None,
+    )
     source = JsonLdProductPageSource(
         JsonLdSourceConfig.model_validate(
             {
@@ -130,21 +146,15 @@ async def test_configured_jsonld_page_applies_retailer_and_store_metadata(
                     }
                 ]
             }
-        )
+        ),
+        crawler=crawler,
     )
-    html = (FIXTURES / "product_offer.html").read_text(encoding="utf-8")
-
-    async def fake_fetch(
-        pages: list[object],
-    ) -> list[tuple[object, str]]:
-        return [(pages[0], html)]
-
-    monkeypatch.setattr(source, "_fetch_pages", fake_fetch)
-    offers = await source.search(
-        SearchRequest(
-            zip_code="19103", maximum_distance_miles=5, brands=["Ghost"]
+    try:
+        offers = await source.search(
+            SearchRequest(zip_code="19103", maximum_distance_miles=5, brands=["Ghost"])
         )
-    )
+    finally:
+        await client.aclose()
     assert offers[0].retailer == "The Vitamin Shoppe"
     assert offers[0].fulfillment_type == "pickup"
     assert offers[0].store_name == "Chestnut St"
@@ -168,8 +178,6 @@ async def test_disabled_jsonld_sample_page_is_not_requested() -> None:
         )
     )
     offers = await source.search(
-        SearchRequest(
-            zip_code="19103", maximum_distance_miles=5, brands=["Ghost"]
-        )
+        SearchRequest(zip_code="19103", maximum_distance_miles=5, brands=["Ghost"])
     )
     assert offers == []

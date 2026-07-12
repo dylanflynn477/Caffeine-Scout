@@ -33,6 +33,21 @@ product_filters:
     - "supplement"
     - "empty can"
 
+crawler:
+  user_agent: "CaffeineScout/0.1 (+https://github.com/dylanflynn477/Caffeine-Scout)"
+  contact: ""
+  respect_robots_txt: true
+  allow_when_robots_unavailable: true
+  minimum_request_interval_seconds: 3
+  per_domain_concurrency: 1
+  response_cache_hours: 12
+  request_timeout_seconds: 20
+  playwright_timeout_seconds: 30
+  observe_public_product_json: true
+  stop_on_captcha: true
+  stop_on_access_denied: true
+  maximum_pages_per_source_per_scan: 10
+
 sources:
   mock:
     enabled: true

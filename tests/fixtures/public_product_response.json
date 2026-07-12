@@ -1,0 +1,10 @@
+{
+  "product": {
+    "productName": "C4 Performance Energy Drink Variety Pack, 12 Count",
+    "brandName": "C4",
+    "sku": "API-C4-12",
+    "salePrice": 18.99,
+    "inStock": true,
+    "canonicalUrl": "https://example.test/c4"
+  }
+}

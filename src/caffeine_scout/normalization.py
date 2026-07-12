@@ -15,6 +15,7 @@ PACK_PATTERNS = (
     re.compile(r"\bpack\s+of\s+(\d{1,3})\b", re.I),
     re.compile(r"\b(\d{1,3})\s*[- ]?pack\b", re.I),
     re.compile(r"\b(\d{1,3})\s*(?:count|ct)\b", re.I),
+    re.compile(r"\b(\d{1,3})\s+cans?\b", re.I),
     re.compile(r"\bcase\s+of\s+(\d{1,3})\b", re.I),
 )
 CAN_SIZE_PATTERN = re.compile(r"\b(\d{1,2}(?:\.\d+)?)\s*(?:fl\.?\s*)?oz\b", re.I)
@@ -82,14 +83,14 @@ def extract_flavor(name: str, brand: BrandConfig) -> str | None:
     cleaned = name
     for alias in sorted([brand.name, *brand.aliases], key=len, reverse=True):
         cleaned = re.sub(re.escape(alias), " ", cleaned, flags=re.I)
+    for pattern in (*PACK_PATTERNS, CAN_SIZE_PATTERN, CAFFEINE_PATTERN):
+        cleaned = pattern.sub(" ", cleaned)
     cleaned = re.sub(
         r"\b(?:energy|drink|drinks|zero sugar|performance|smart energy|cans?|case)\b",
         " ",
         cleaned,
         flags=re.I,
     )
-    for pattern in (*PACK_PATTERNS, CAN_SIZE_PATTERN, CAFFEINE_PATTERN):
-        cleaned = pattern.sub(" ", cleaned)
     cleaned = re.sub(r"[^A-Za-z0-9 -]+", " ", cleaned)
     cleaned = re.sub(r"\s+", " ", cleaned).strip(" -")
     return cleaned.title() if cleaned and not cleaned.isdigit() else None
@@ -117,6 +118,8 @@ def normalize_offer(raw: RawOffer, config: AppConfig) -> Offer:
     if not relevant:
         raise NormalizationError(reason or "irrelevant product")
     brand = canonicalize_brand(raw.canonical_brand or raw.product_name, config.brands)
+    if brand is None and raw.canonical_brand:
+        brand = canonicalize_brand(raw.product_name, config.brands)
     if brand is None:
         raise NormalizationError("unrecognized brand")
     pack_count = raw.pack_count or extract_pack_count(raw.product_name)

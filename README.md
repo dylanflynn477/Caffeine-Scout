@@ -32,6 +32,9 @@ flowchart LR
     CLI["Typer CLI"] --> Config["Pydantic configuration"]
     Config --> Scan["Concurrent scan service"]
     Scan --> Sources["RetailerSource adapters"]
+    Sources --> Crawler["EthicalPageCrawler"]
+    Crawler --> Robots["Robots + refusal policy"]
+    Crawler --> Pipeline["Static → embedded JSON → Playwright → first-party JSON"]
     Sources --> Raw["RawOffer boundary"]
     Raw --> Normalize["Filter, parse, normalize"]
     Normalize --> Dedup["Fingerprint and deduplicate"]
@@ -93,6 +96,28 @@ never YAML committed to source control; `.env.example` lists supported names.
 The SQLite URL defaults to `sqlite:///caffeine_scout.db` and can be overridden with a
 top-level `database_url`. Source adapters are individually enabled or disabled.
 
+### Ethical crawler policy
+
+`EthicalPageCrawler` is shared by public-page adapters and applies a progressive,
+non-bypassable policy:
+
+1. Evaluate `robots.txt` for the exact product path. An explicit `Disallow` stops.
+2. Fetch public HTML once with HTTPX and inspect recursive schema.org product offers.
+3. Inspect narrowly scoped public product hydration data such as `__NEXT_DATA__`.
+4. If no price exists, render the same anonymous page with ordinary Playwright.
+5. Observe same/first-party public product JSON loaded by that page without replaying
+   requests, collecting authorization state, or becoming a generalized endpoint crawler.
+
+An unavailable or 4xx `robots.txt` is recorded as `unknown`, not automatically
+prohibited. The crawler then makes at most one polite product-page request and stops on
+401, 403, 429, CAPTCHA, authentication, or access-denied content. It never uses stealth
+plugins, proxy rotation, automated login, authenticated pages, or CAPTCHA workarounds.
+
+Defaults enforce one request per domain at a time, three seconds between same-domain
+requests, 12-hour successful-page caching, limited exponential backoff for 5xx errors,
+and at most ten exact pages per source per scan. The CAPTCHA, access-denial, and explicit
+robots protections cannot be disabled in configuration.
+
 ### Included retailer website samples
 
 The example configuration includes current official links for GNC, The Vitamin Shoppe,
@@ -125,6 +150,8 @@ caffeine-scout scan --format csv
 caffeine-scout history
 caffeine-scout history --brand Ghost
 caffeine-scout sources
+caffeine-scout diagnose-source GNC
+caffeine-scout diagnose-source "The Vitamin Shoppe"
 caffeine-scout init-config
 ```
 
@@ -145,8 +172,10 @@ Exact thresholds and label boundaries are covered by tests.
 - **MockSource** is deterministic, realistic, and fully offline. It is the only source
   used by the demo and default data-path tests.
 - **JsonLdProductPageSource** reads schema.org `Product`, `Offer`, and `AggregateOffer`
-  from an explicit allowlist of exact public URLs. Sites can omit, delay, or publish
-  stale structured prices. Missing structured pricing is reported as unsupported.
+  (including nested `ProductGroup` variants and `priceSpecification`) from an explicit
+  allowlist of exact public URLs. It can also inspect public product hydration state and
+  use the ethical Playwright fallback. Missing permitted pricing is reported with a
+  structured stage-by-stage reason.
 - **AmazonSource** is deliberately disabled. Amazon's Product Advertising API 5.0 was
   deprecated on May 15, 2026 in favor of the official
   [Creators API](https://affiliate-program.amazon.com/creatorsapi/docs/en-us/introduction).
@@ -189,8 +218,9 @@ caffeine-scout scan --config config.example.yaml
 ```
 
 Tests cover parsing, exclusions, Decimal math, deduplication, historical medians,
-all label boundaries, malformed data, partial source failure, JSON-LD fixtures, and
-machine-readable exports.
+all label boundaries, malformed data, partial source failure, JSON-LD/Next.js fixtures,
+robots decisions, refusals, CAPTCHA detection, throttling, caching, progressive fallback,
+first-party JSON observation, and machine-readable exports. Tests never use live sites.
 
 ## Roadmap
 

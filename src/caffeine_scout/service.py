@@ -31,7 +31,7 @@ def build_sources(config: AppConfig) -> list[RetailerSource]:
     if config.sources.mock.enabled:
         sources.append(MockSource())
     if config.sources.jsonld.enabled:
-        sources.append(JsonLdProductPageSource(config.sources.jsonld))
+        sources.append(JsonLdProductPageSource(config.sources.jsonld, config.crawler))
     if config.sources.amazon.enabled:
         sources.append(AmazonSource(config.sources.amazon))
     return sources

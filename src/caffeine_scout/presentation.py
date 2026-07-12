@@ -10,7 +10,7 @@ from typing import Any, Literal, cast
 from rich.console import Console
 from rich.table import Table
 
-from caffeine_scout.models import HistoryRow, Offer, ScanResult, SourceStatus
+from caffeine_scout.models import CrawlResult, HistoryRow, Offer, ScanResult, SourceStatus
 
 
 def scan_json(result: ScanResult) -> str:
@@ -130,8 +130,7 @@ def print_scan(result: ScanResult, console: Console) -> None:
     console.print(table)
     if result.quarantined_count:
         console.print(
-            "[yellow]Quarantined malformed/irrelevant offers: "
-            f"{result.quarantined_count}[/yellow]"
+            f"[yellow]Quarantined malformed/irrelevant offers: {result.quarantined_count}[/yellow]"
         )
     if result.errors:
         console.print("\n[bold red]Source failures[/bold red]")
@@ -176,3 +175,41 @@ def print_sources(statuses: list[SourceStatus], console: Console) -> None:
         state = "disabled" if not status.enabled else "ready" if status.healthy else "setup needed"
         table.add_row(status.name, state, status.detail)
     console.print(table)
+
+
+def print_source_diagnostics(results: list[CrawlResult], console: Console) -> None:
+    summary = Table(title="Ethical source diagnostics", header_style="bold")
+    for heading in ("URL", "Robots", "HTTP", "Method", "Cache", "Offers", "Outcome"):
+        summary.add_column(heading)
+    for result in results:
+        fetch = result.fetch
+        summary.add_row(
+            fetch.requested_url,
+            fetch.robots_decision.decision,
+            str(fetch.status_code) if fetch.status_code is not None else "-",
+            fetch.method_used or "-",
+            "yes" if fetch.cached else "no",
+            str(len(result.offers)),
+            result.failure_reason or "success",
+        )
+    console.print(summary)
+
+    stages = Table(title="Stages attempted", header_style="bold")
+    stages.add_column("Source")
+    stages.add_column("Stage")
+    stages.add_column("Result")
+    stages.add_column("Reason")
+    stages.add_column("Safe details")
+    for result in results:
+        for diagnostic in result.fetch.diagnostics:
+            details = ", ".join(
+                f"{key}={value}" for key, value in diagnostic.details.items() if value is not None
+            )
+            stages.add_row(
+                diagnostic.source,
+                diagnostic.stage,
+                "ok" if diagnostic.success else "stopped/no data",
+                diagnostic.reason,
+                details or "-",
+            )
+    console.print(stages)
