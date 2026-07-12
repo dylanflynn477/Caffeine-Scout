@@ -1,0 +1,16 @@
+[
+  {
+    "source": "fixture",
+    "retailer": "Fixture Shop",
+    "product_name": "Alani Nu Energy Drink Cherry Slush, 12 Fl Oz Cans, Pack of 12",
+    "listed_price": "18.99",
+    "url": "https://example.test/alani"
+  },
+  {
+    "source": "fixture",
+    "retailer": "Fixture Shop",
+    "product_name": "energy powder packet",
+    "listed_price": "0",
+    "url": "https://example.test/bad"
+  }
+]
