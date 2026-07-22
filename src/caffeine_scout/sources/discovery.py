@@ -131,6 +131,8 @@ def _target_brand(name: str) -> str | None:
         return "Ghost"
     if re.search(r"(?:^|\W)c4(?:\W|$)", lowered):
         return "C4"
+    if "monster" in lowered:
+        return "Monster"
     return None
 
 

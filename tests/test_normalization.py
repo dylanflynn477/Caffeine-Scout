@@ -60,6 +60,8 @@ def test_total_quantity_extraction() -> None:
         ("Alani Cherry Slush Energy", "Alani Nu"),
         ("GHOST ENERGY Redberry", "Ghost"),
         ("Cellucor C4 Energy", "C4"),
+        ("Monster Energy Original", "Monster"),
+        ("Juice Monster Mango Loco Energy", "Monster"),
     ],
 )
 def test_brand_aliases(config: AppConfig, name: str, expected: str) -> None:

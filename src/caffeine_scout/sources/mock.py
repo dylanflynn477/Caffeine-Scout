@@ -67,6 +67,19 @@ class MockSource(RetailerSource):
                 notes=["Subscription discount is not included in effective price"],
                 data_confidence=0.94,
             ),
+            RawOffer(
+                source=self.name,
+                retailer="MockMart Online",
+                source_product_id="MM-MONSTER-12",
+                product_name="Monster Energy Original - 12pk/16 fl oz Cans",
+                listed_price=Decimal("22.99"),
+                caffeine_mg_per_can=160,
+                shipping_cost=Decimal("0"),
+                fulfillment_type="online",
+                in_stock=True,
+                url="https://example.test/monster-original-12",
+                data_confidence=0.98,
+            ),
         ]
         requested = {brand.casefold() for brand in request.brands}
         selected = [

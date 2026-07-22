@@ -22,6 +22,16 @@ brands:
     target_price_per_can: 1.50
     default_caffeine_mg: 200
 
+  - name: "Monster"
+    aliases:
+      - "Monster Energy"
+      - "Java Monster"
+      - "Juice Monster"
+    target_price_per_can: 1.75
+    # Monster caffeine varies by product and size; adapters should supply it
+    # only when a public listing makes the exact per-can value explicit.
+    default_caffeine_mg: null
+
 product_filters:
   required_terms:
     - "energy"
@@ -111,6 +121,7 @@ sources:
   target:
     enabled: true
     discovery_urls:
+      - "https://www.target.com/b/monster-energy/-/N-561ol"
       - "https://www.target.com/c/energy-drinks-beverages-grocery/-/N-4uez2"
     maximum_pages: 3
     visit_product_pages: false

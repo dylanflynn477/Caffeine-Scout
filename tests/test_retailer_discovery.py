@@ -21,7 +21,7 @@ def _request() -> SearchRequest:
     return SearchRequest(
         zip_code="19103",
         maximum_distance_miles=5,
-        brands=["Alani Nu", "Ghost", "C4"],
+        brands=["Alani Nu", "Ghost", "C4", "Monster"],
     )
 
 
@@ -42,7 +42,7 @@ def test_target_cards_promo_duplicates_exclusions_and_malformed(config) -> None:
     source = TargetSource(
         DiscoverySourceConfig(discovery_urls=["https://www.target.com/c/energy-drinks/-/N-4uez2"])
     )
-    source._requested_brands = {"alani nu", "ghost", "c4"}
+    source._requested_brands = {"alani nu", "ghost", "c4", "monster"}
     html = (FIXTURES / "target_category_page_1.html").read_text(encoding="utf-8")
     offers = source._extract_catalog(html, "https://www.target.com/c/energy-drinks/-/N-4uez2")
     assert len(offers) == 1
@@ -66,7 +66,7 @@ def test_cvs_cards_sale_regular_inventory_and_exclusions() -> None:
             discovery_urls=["https://www.cvs.com/shop/grocery/beverages/sport-energy-drinks"]
         )
     )
-    source._requested_brands = {"alani nu", "ghost", "c4"}
+    source._requested_brands = {"alani nu", "ghost", "c4", "monster"}
     html = (FIXTURES / "cvs_category_page_1.html").read_text(encoding="utf-8")
     offers = source._extract_catalog(
         html, "https://www.cvs.com/shop/grocery/beverages/sport-energy-drinks"
@@ -111,10 +111,12 @@ async def test_target_discovery_follows_at_most_configured_pages(tmp_path: Path)
     offers = await source.discover(_request())
     await client.aclose()
     assert len(source.last_results) == 2
-    assert {offer.canonical_brand for offer in offers} == {"Alani Nu", "Ghost"}
+    assert {offer.canonical_brand for offer in offers} == {"Alani Nu", "Ghost", "Monster"}
     ghost = next(offer for offer in offers if offer.canonical_brand == "Ghost")
     assert ghost.regular_price == Decimal("24.99")
     assert ghost.advertised_unit_price == "$18.99 ($0.10/fluid ounce)"
+    monster = next(offer for offer in offers if offer.canonical_brand == "Monster")
+    assert monster.listed_price == Decimal("24.49")
 
 
 @pytest.mark.asyncio

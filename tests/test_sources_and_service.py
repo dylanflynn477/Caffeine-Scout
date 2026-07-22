@@ -17,8 +17,19 @@ from caffeine_scout.sources.jsonld import (
     StructuredPricingUnavailable,
     parse_jsonld_product_page,
 )
+from caffeine_scout.sources.mock import MockSource
 
 FIXTURES = Path(__file__).parent / "fixtures"
+
+
+@pytest.mark.asyncio
+async def test_mock_source_includes_monster() -> None:
+    offers = await MockSource().search(
+        SearchRequest(zip_code="19103", maximum_distance_miles=5, brands=["Monster"])
+    )
+    assert len(offers) == 1
+    assert offers[0].product_name == "Monster Energy Original - 12pk/16 fl oz Cans"
+    assert offers[0].caffeine_mg_per_can == 160
 
 
 class GoodSource(RetailerSource):

@@ -5,6 +5,7 @@ brands:
   - {name: "Alani Nu", aliases: ["Alani"], target_price_per_can: 1.40, default_caffeine_mg: 200}
   - {name: "Ghost", aliases: ["Ghost Energy"], target_price_per_can: 1.60, default_caffeine_mg: 200}
   - {name: "C4", aliases: ["C4 Energy", "Cellucor C4"], target_price_per_can: 1.50, default_caffeine_mg: 200}
+  - {name: "Monster", aliases: ["Monster Energy", "Java Monster", "Juice Monster"], target_price_per_can: 1.75, default_caffeine_mg: null}
 product_filters:
   required_terms: ["energy"]
   excluded_terms: ["powder", "pre-workout", "packet", "mix", "supplement", "empty can"]
@@ -42,7 +43,7 @@ sources:
       - {retailer: "Target", url: "https://www.target.com/c/energy-drinks-beverages-grocery/-/N-4uez2", note: "Discovery handled by the dedicated Target adapter"}
   target:
     enabled: true
-    discovery_urls: ["https://www.target.com/c/energy-drinks-beverages-grocery/-/N-4uez2"]
+    discovery_urls: ["https://www.target.com/b/monster-energy/-/N-561ol", "https://www.target.com/c/energy-drinks-beverages-grocery/-/N-4uez2"]
     maximum_pages: 3
     visit_product_pages: false
   cvs:

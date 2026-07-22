@@ -33,6 +33,12 @@ def config() -> AppConfig:
                     "target_price_per_can": "1.50",
                     "default_caffeine_mg": 200,
                 },
+                {
+                    "name": "Monster",
+                    "aliases": ["Monster Energy", "Java Monster", "Juice Monster"],
+                    "target_price_per_can": "1.75",
+                    "default_caffeine_mg": None,
+                },
             ],
             "product_filters": {
                 "required_terms": ["energy"],

@@ -5,8 +5,11 @@
 Caffeine Scout is a location-aware Python CLI that collects energy-drink offers,
 normalizes mixed pack sizes to a price per can, remembers price history, and assigns
 every offer a mathematically deterministic (and intentionally dramatic) Robbery Index.
-It starts with Alani Nu, Ghost, C4, and ZIP code 19103, but brands, locations, filters,
+It starts with Alani Nu, Ghost, C4, Monster, and ZIP code 19103, but brands, locations, filters,
 and retailer adapters are configuration—not application assumptions.
+
+A dated, reproducible public-retailer verification is recorded in
+[LIVE_SCAN_EVIDENCE.md](LIVE_SCAN_EVIDENCE.md).
 
 ## Sample output
 
@@ -131,7 +134,8 @@ experimental and disabled by default:
 - GIANT has an exact Alani Nu delivery-page example plus its energy-drink catalog; its
   official locator lists a store at 60 N 23rd Street, Philadelphia, PA 19103.
 - Target scans its canonical energy-drink category with static product cards first,
-  followed by the shared embedded-data and Playwright fallbacks when permitted.
+  plus its canonical Monster brand page, followed by the shared embedded-data and
+  Playwright fallbacks when permitted.
 - CVS scans its official sport and energy-drink catalog. Availability remains unknown
   unless the page says in stock, available, unavailable, or out of stock explicitly.
 - ACME uses the same bounded pipeline but remains experimental until a live permitted
